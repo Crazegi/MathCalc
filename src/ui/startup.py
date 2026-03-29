@@ -15,11 +15,17 @@ class StartupWidget(QWidget):
         layout.addWidget(title)
         layout.addWidget(subtitle)
         buttons_layout = QHBoxLayout()
-        units = [("Algebra","algebra"),("Trigonometry","trigonometry"),("Geometry","geometry"),("Calculus","calculus")]
+        units = [("Algebra","algebra"),("Trigonometry","trigonometry"),("Functions","functions"),("Probability","probability"),("Geometry","geometry"),("Calculus","calculus"),("Stereometry","stereometry"),("Statistics","statistics")]
         for name, key in units:
             btn = QPushButton(name)
             btn.setMinimumHeight(40)
             btn.clicked.connect(lambda checked, k=key: self.on_select_unit(k))
             buttons_layout.addWidget(btn)
+
+        curriculum_btn = QPushButton('Curriculum')
+        curriculum_btn.setMinimumHeight(40)
+        curriculum_btn.clicked.connect(lambda checked: self.on_select_unit('curriculum'))
+        buttons_layout.addWidget(curriculum_btn)
+
         layout.addLayout(buttons_layout)
         self.setLayout(layout)

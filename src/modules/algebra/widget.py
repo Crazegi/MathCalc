@@ -17,6 +17,8 @@ class AlgebraWidget(QWidget):
         self.calc_button.clicked.connect(self.on_calculate)
         self.apply_geo_button = QPushButton("Apply to Geometry")
         self.apply_geo_button.clicked.connect(self.on_apply_geometry)
+        self.stats_button = QPushButton("Stats (mean/median/mode)")
+        self.stats_button.clicked.connect(self.on_statistics)
         self.show_steps_cb = QCheckBox("Show steps")
         self.batch_input = QTextEdit()
         self.batch_input.setPlaceholderText("Batch functions (one per line), e.g.\ny = x**2\ny = sin(x)\ny = 0.5*x + 1")
@@ -27,6 +29,7 @@ class AlgebraWidget(QWidget):
         top_layout.addWidget(self.input_line)
         top_layout.addWidget(self.calc_button)
         top_layout.addWidget(self.apply_geo_button)
+        top_layout.addWidget(self.stats_button)
         top_layout.addWidget(self.show_steps_cb)
         main_layout.addLayout(top_layout)
         main_layout.addWidget(QLabel('Batch Graph View'))
@@ -42,6 +45,20 @@ class AlgebraWidget(QWidget):
         self.steps_view.setFixedHeight(180)
         main_layout.addWidget(self.steps_view)
         self.setLayout(main_layout)
+
+    def on_statistics(self):
+        values = self.input_line.text().strip()
+        if not values:
+            return
+        try:
+            stats, steps = self.engine.calculate_statistics(values)
+            self.result_label.setText(f"Stats: mean={stats['mean']:.4g}, median={stats['median']:.4g}, mode={stats['mode']}, std={stats['stddev']:.4g}")
+            if self.show_steps_cb.isChecked():
+                self.steps_view.setPlainText('\n'.join(steps))
+            else:
+                self.steps_view.clear()
+        except Exception as e:
+            self.steps_view.setPlainText(f"Statistics error: {e}")
 
     def on_calculate(self):
         expr_text = self.input_line.text().strip()
