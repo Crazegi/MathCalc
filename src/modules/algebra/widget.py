@@ -18,11 +18,20 @@ class AlgebraWidget(QWidget):
         self.apply_geo_button = QPushButton("Apply to Geometry")
         self.apply_geo_button.clicked.connect(self.on_apply_geometry)
         self.show_steps_cb = QCheckBox("Show steps")
+        self.batch_input = QTextEdit()
+        self.batch_input.setPlaceholderText("Batch functions (one per line), e.g.\ny = x**2\ny = sin(x)\ny = 0.5*x + 1")
+        self.batch_input.setFixedHeight(100)
+        self.batch_button = QPushButton("Batch Plot")
+        self.batch_button.clicked.connect(self.on_batch_plot)
+
         top_layout.addWidget(self.input_line)
         top_layout.addWidget(self.calc_button)
         top_layout.addWidget(self.apply_geo_button)
         top_layout.addWidget(self.show_steps_cb)
         main_layout.addLayout(top_layout)
+        main_layout.addWidget(QLabel('Batch Graph View'))
+        main_layout.addWidget(self.batch_input)
+        main_layout.addWidget(self.batch_button)
         self.result_label = QLabel("Result: ")
         main_layout.addWidget(self.result_label)
         self.plot_widget = pg.PlotWidget()
@@ -60,6 +69,38 @@ class AlgebraWidget(QWidget):
             return
         msg = self.apply_equation(expr_text)
         self.steps_view.append(f'Geometry: {msg}')
+
+    def on_batch_plot(self):
+        instructions = self.batch_input.toPlainText().strip().splitlines()
+        if not instructions:
+            return
+        self.plot_widget.clear()
+        self.steps_view.clear()
+        x_vals = np.linspace(-10, 10, 400)
+        colors = ['r','g','b','m','y','c']
+        legend = []
+        for i, line in enumerate(instructions):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                expr = line
+                if '=' in line:
+                    lhs, rhs = line.split('=',1)
+                    target = lhs.strip()
+                    rhs_expr = rhs.strip()
+                    if target == 'y':
+                        expr = rhs_expr
+                x = sp.symbols('x')
+                y_expr = sp.sympify(expr.replace('^','**'))
+                f = sp.lambdify(x, y_expr, 'numpy')
+                y_vals = f(x_vals)
+                self.plot_widget.plot(x_vals, y_vals, pen=pg.mkPen(colors[i % len(colors)], width=2))
+                legend.append(f"{line}")
+            except Exception as e:
+                self.steps_view.append(f"Batch line error for '{line}': {e}\n")
+        self.steps_view.append('Batch Graph:\n' + '\n'.join(legend))
+
 
     def apply_equation(self, eq_text: str) -> str:
         try:

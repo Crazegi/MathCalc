@@ -1,11 +1,21 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QLineEdit, QComboBox, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QLineEdit, QComboBox, QCheckBox, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QPen, QBrush, QColor, QPainter, QFont
 from PySide6.QtWidgets import QGraphicsItem
 from dataclasses import dataclass
-from typing import cast
+from typing import cast, Optional
 import sympy as sp
 import math
+import json
+import os
+import random
+
+
+@dataclass
+class GeometryObjectMeta:
+    kind: str
+    name: str
+    details: str
 
 
 class PointItem(QGraphicsEllipseItem):
@@ -34,6 +44,7 @@ class LineObject:
     p1: PointItem
     p2: PointItem
     item: QGraphicsLineItem
+    meta: GeometryObjectMeta
 
 
 @dataclass
@@ -41,6 +52,7 @@ class CircleObject:
     center: PointItem
     boundary: PointItem
     item: QGraphicsEllipseItem
+    meta: GeometryObjectMeta
 
 
 class GeometryCanvas(QGraphicsView):
@@ -77,6 +89,7 @@ class GeometryWidget(QWidget):
 
         self.canvas = GeometryCanvas(self)
         self.canvas.setMinimumSize(700, 500)
+        self.canvas._scene.selectionChanged.connect(self.on_selection_changed)
 
         # Units selector
         self.unit_combo = QComboBox()
@@ -104,12 +117,19 @@ class GeometryWidget(QWidget):
         add_angle_btn.clicked.connect(lambda: self.set_mode('angle'))
         clear_btn.clicked.connect(self.clear_all)
 
+        self.triangle_analysis_btn = QPushButton('Triangle Analysis')
+        self.triangle_analysis_btn.clicked.connect(self.triangle_analysis)
+        self.vocab_checkbox = QCheckBox('Instructor vocabulary')
+        self.vocab_checkbox.stateChanged.connect(self.update_info_panel)
+
         buttons_layout.addWidget(add_angle_btn)
 
         buttons_layout.addWidget(add_point_btn)
         buttons_layout.addWidget(add_line_btn)
         buttons_layout.addWidget(add_circle_btn)
+        buttons_layout.addWidget(self.triangle_analysis_btn)
         buttons_layout.addWidget(clear_btn)
+        buttons_layout.addWidget(self.vocab_checkbox)
         buttons_layout.addStretch()
         buttons_layout.addWidget(self.unit_label)
         buttons_layout.addWidget(self.unit_combo)
@@ -134,8 +154,37 @@ class GeometryWidget(QWidget):
         main_layout.addWidget(self.mode_label)
         main_layout.addWidget(self.status_label)
         main_layout.addWidget(self.canvas)
+
+        self.property_box = QTextEdit()
+        self.property_box.setReadOnly(True)
+        self.property_box.setFont(QFont('Courier', 10))
+        self.property_box.setFixedHeight(120)
+        main_layout.addWidget(QLabel('Selected object properties'))
+        main_layout.addWidget(self.property_box)
+
         main_layout.addWidget(QLabel('Geometry Info'))
         main_layout.addWidget(self.info_box)
+
+        practice_layout = QHBoxLayout()
+        self.practice_load_btn = QPushButton('Load Practice Problem')
+        self.practice_solve_btn = QPushButton('Solve Practice')
+        self.practice_load_btn.clicked.connect(self.load_practice_problem)
+        self.practice_solve_btn.clicked.connect(self.solve_practice_problem)
+        practice_layout.addWidget(self.practice_load_btn)
+        practice_layout.addWidget(self.practice_solve_btn)
+        main_layout.addLayout(practice_layout)
+
+        hint_layout = QHBoxLayout()
+        self.hint1_btn = QPushButton('Hint 1')
+        self.hint2_btn = QPushButton('Hint 2')
+        self.hint_answer_btn = QPushButton('Show Answer')
+        self.hint1_btn.clicked.connect(lambda: self.show_hint(1))
+        self.hint2_btn.clicked.connect(lambda: self.show_hint(2))
+        self.hint_answer_btn.clicked.connect(lambda: self.show_hint(3))
+        hint_layout.addWidget(self.hint1_btn)
+        hint_layout.addWidget(self.hint2_btn)
+        hint_layout.addWidget(self.hint_answer_btn)
+        main_layout.addLayout(hint_layout)
 
         # Suggestions and angle awareness
         self.suggestions_box = QTextEdit()
@@ -223,18 +272,128 @@ class GeometryWidget(QWidget):
         self.update_info_panel()
 
     def _commit_line(self):
-        p1, p2 = self.selected_points
+        if len(self.selected_points) < 2:
+            return
+        p1, p2 = self.selected_points[0], self.selected_points[1]
         p1c = p1.rect().center() + p1.pos()
         p2c = p2.rect().center() + p2.pos()
         line_item = QGraphicsLineItem(p1c.x(), p1c.y(), p2c.x(), p2c.y())
         line_item.setPen(QPen(QColor('blue'), 2))
+        line_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.canvas._scene.addItem(line_item)
-
-        self.line_objects.append(LineObject(p1, p2, line_item))
+        self.line_objects.append(LineObject(p1, p2, line_item, GeometryObjectMeta('line', f'{p1.name}{p2.name}', '')))
         self.history.append({'kind':'line_from_points','line':line_item,'p1':p1,'p2':p2})
         self.status_label.setText(f'Line {p1.name}{p2.name} created')
         self._clear_point_highlights()
         self.update_info_panel()
+
+    def on_selection_changed(self):
+        selected = self.canvas._scene.selectedItems()
+        if not selected:
+            self.property_box.clear()
+            return
+        item = selected[0]
+        if isinstance(item, QGraphicsLineItem):
+            for lo in self.line_objects:
+                if lo.item is item:
+                    self._populate_line_properties(lo)
+                    break
+        elif isinstance(item, QGraphicsEllipseItem):
+            for co in self.circle_objects:
+                if co.item is item:
+                    self._populate_circle_properties(co)
+                    break
+        else:
+            self.property_box.setPlainText(f'Selected: {item}')
+
+    def _populate_line_properties(self, lo: LineObject):
+        x1, y1 = lo.p1.rect().center().x() + lo.p1.pos().x(), lo.p1.rect().center().y() + lo.p1.pos().y()
+        x2, y2 = lo.p2.rect().center().x() + lo.p2.pos().x(), lo.p2.rect().center().y() + lo.p2.pos().y()
+        dx, dy = x2 - x1, y2 - y1
+        slope = dy / dx if abs(dx) > 1e-6 else float('inf')
+        intercept = y1 - slope * x1 if slope != float('inf') else None
+        props = [f'Line: {lo.p1.name}{lo.p2.name}', f'Slope: {slope:.4f}' if slope != float('inf') else 'Slope: vertical', f'Intercept: {intercept:.4f}' if intercept is not None else 'Intercept: N/A']
+        self.property_box.setPlainText('\n'.join(props))
+
+    def _populate_circle_properties(self, co: CircleObject):
+        cx, cy = co.center.rect().center().x() + co.center.pos().x(), co.center.rect().center().y() + co.center.pos().y()
+        bx, by = co.boundary.rect().center().x() + co.boundary.pos().x(), co.boundary.rect().center().y() + co.boundary.pos().y()
+        r = math.hypot(cx - bx, cy - by)
+        props = [f'Circle center: ({cx:.2f}, {cy:.2f})', f'Radius: {r:.2f}', f'Equation: (x - {cx:.2f})^2 + (y - {cy:.2f})^2 = {r:.2f}^2']
+        self.property_box.setPlainText('\n'.join(props))
+
+    def triangle_analysis(self):
+        if len(self.points) < 3:
+            self.status_label.setText('Need 3 points for triangle analysis')
+            return
+        a,b,c = self.points[0], self.points[1], self.points[2]
+        _, steps = self._triangle_area_details(a,b,c)
+        alt_a = self._triangle_altitude(a,b,c)
+        alt_b = self._triangle_altitude(b,c,a)
+        alt_c = self._triangle_altitude(c,a,b)
+        self.suggestions_box.setPlainText('\n'.join(steps + [f'Altitudes: from A {alt_a:.2f}, from B {alt_b:.2f}, from C {alt_c:.2f}']))
+
+    def _triangle_altitude(self, vertex: PointItem, p1: PointItem, p2: PointItem) -> float:
+        vx, vy = vertex.pos().x(), vertex.pos().y()
+        x1,y1 = p1.pos().x(), p1.pos().y()
+        x2,y2 = p2.pos().x(), p2.pos().y()
+        area_2 = abs((x1-vx)*(y2-vy) - (x2-vx)*(y1-vy))
+        base = math.hypot(x2-x1, y2-y1)
+        return (2*area_2/base) if base!=0 else 0
+
+    def load_practice_problem(self):
+        problems_path = os.path.join(os.getcwd(), 'data', 'practice_problems.json')
+        os.makedirs(os.path.dirname(problems_path), exist_ok=True)
+        if not os.path.exists(problems_path):
+            default = [
+                {
+                    'id': 1,
+                    'question': 'Given triangle with A(0,0), B(4,0), C(0,3), compute area.',
+                    'answer': 6.0,
+                    'type': 'triangle_area',
+                    'points': [[0,0],[4,0],[0,3]]
+                }
+            ]
+            with open(problems_path, 'w', encoding='utf-8') as f:
+                json.dump(default, f, indent=2)
+
+        with open(problems_path, 'r', encoding='utf-8') as f:
+            problems = json.load(f)
+        self.current_problem = random.choice(problems)
+        self.status_label.setText(f"Loaded problem {self.current_problem['id']}: {self.current_problem['question']}")
+        self.suggestions_box.setPlainText('')
+
+    def solve_practice_problem(self):
+        if not hasattr(self, 'current_problem') or self.current_problem is None:
+            self.status_label.setText('No practice problem loaded.')
+            return
+        prob = self.current_problem
+        result = None
+        if prob.get('type') == 'triangle_area':
+            pts = prob.get('points')
+            a,b,c = pts
+            area = abs(0.5 * ((a[0]*(b[1]-c[1]) + b[0]*(c[1]-a[1]) + c[0]*(a[1]-b[1]))))
+            result = area
+        log_line = f"problem={prob['id']} computed={result} expected={prob['answer']}"
+        os.makedirs('logs', exist_ok=True)
+        with open('logs/practice.log', 'a', encoding='utf-8') as logf:
+            logf.write(log_line + '\n')
+        self.status_label.setText(f"Solved: {result}, expected: {prob['answer']}")
+        self.suggestions_box.setPlainText(log_line)
+
+    def show_hint(self, level:int):
+        if len(self.points) < 3:
+            self.status_label.setText('Add at least 3 points based on instructions')
+            return
+        a,b,c = self.points[0], self.points[1], self.points[2]
+        if level==1:
+            self.suggestions_box.setPlainText(f'Hint 1: Compute AB distance. AB = {self._formatted_length(self._point_distance(a,b))}')
+        elif level==2:
+            angB = self._angle_degrees(a.pos(), b.pos(), c.pos())
+            self.suggestions_box.setPlainText(f'Hint 2: Compute angle at B: {angB:.2f}\u00b0')
+        else:
+            area,_ = self._triangle_area_details(a,b,c)
+            self.suggestions_box.setPlainText(f'Answer: Triangle area = {area:.2f} {self.unit_combo.currentText()}^2')
 
     def _commit_circle(self):
         c, b = self.selected_points
@@ -245,7 +404,8 @@ class GeometryWidget(QWidget):
         circle_item.setPen(QPen(QColor('magenta'), 2))
         self.canvas._scene.addItem(circle_item)
 
-        self.circle_objects.append(CircleObject(c, b, circle_item))
+        circle_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.circle_objects.append(CircleObject(c, b, circle_item, GeometryObjectMeta('circle', f'{c.name}R', '')))
         self.history.append({'kind':'circle_from_points','circle':circle_item,'center':c,'boundary':b})
         self.status_label.setText(f'Circle centered at {c.name} radius {self._formatted_length(r)}')
         self._clear_point_highlights()
@@ -286,8 +446,9 @@ class GeometryWidget(QWidget):
         p2 = self._add_point_item(100, 100 * m + b, f'L{len(self.points)+1}')
         line_item = QGraphicsLineItem(p1.rect().center().x() + p1.pos().x(), p1.rect().center().y() + p1.pos().y(), p2.rect().center().x() + p2.pos().x(), p2.rect().center().y() + p2.pos().y())
         line_item.setPen(QPen(QColor('blue'), 2))
+        line_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.canvas._scene.addItem(line_item)
-        self.line_objects.append(LineObject(p1, p2, line_item))
+        self.line_objects.append(LineObject(p1, p2, line_item, GeometryObjectMeta('line', f'{p1.name}{p2.name}', '')))
         self.history.append({'kind':'line_from_eq','line':line_item,'p1':p1,'p2':p2})
         self.status_label.setText(f'Equation line added: y = {m:.3f}x + {b:.3f}')
         self.update_info_panel()
@@ -299,7 +460,7 @@ class GeometryWidget(QWidget):
         line_item = QGraphicsLineItem(x_val, y1, x_val, y2)
         line_item.setPen(QPen(QColor('blue'), 2))
         self.canvas._scene.addItem(line_item)
-        self.line_objects.append(LineObject(p1, p2, line_item))
+        self.line_objects.append(LineObject(p1, p2, line_item, GeometryObjectMeta('line', f'{p1.name}{p2.name}', 'vertical line')))
         self.status_label.setText(f'Equation line added: x = {x_val:.2f}')
         self.history.append({'kind':'line_from_eq','line':line_item,'p1':p1,'p2':p2})
         self.update_info_panel()
@@ -310,7 +471,7 @@ class GeometryWidget(QWidget):
         circle_item = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r)
         circle_item.setPen(QPen(QColor('magenta'), 2))
         self.canvas._scene.addItem(circle_item)
-        self.circle_objects.append(CircleObject(center, boundary, circle_item))
+        self.circle_objects.append(CircleObject(center, boundary, circle_item, GeometryObjectMeta('circle', f'{center.name}_{boundary.name}', 'equation circle')))
         self.history.append({'kind':'circle_from_eq','circle':circle_item,'center':center,'boundary':boundary})
         self.status_label.setText(f'Equation circle added: center ({cx:.2f}, {cy:.2f}) r={r:.2f}')
         self.update_info_panel()
@@ -408,6 +569,11 @@ class GeometryWidget(QWidget):
 
         if len(self.line_objects) >= 2:
             suggestions.append('Theorem: check if two lines are parallel or perpendicular by slope.')
+            if self.vocab_checkbox.isChecked():
+                suggestions.append('Vocabulary: Parallel Lines, Perpendicular Lines, Slope')
+
+        if self.vocab_checkbox.isChecked() and len(self.points) >= 3:
+            suggestions.append('Vocabulary: Law of Cosines, Law of Sines, Pythagorean Theorem')
 
         self.suggestions_box.setPlainText('\n'.join(suggestions))
 
