@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QComboBox, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QLineEdit, QComboBox, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QPen, QBrush, QColor, QPainter, QFont
 from PySide6.QtWidgets import QGraphicsItem
@@ -73,6 +73,7 @@ class GeometryWidget(QWidget):
         self.selected_points: list[PointItem] = []
         self.line_objects: list[LineObject] = []
         self.circle_objects: list[CircleObject] = []
+        self.history: list[dict] = []
 
         self.canvas = GeometryCanvas(self)
         self.canvas.setMinimumSize(700, 500)
@@ -113,7 +114,22 @@ class GeometryWidget(QWidget):
         buttons_layout.addWidget(self.unit_label)
         buttons_layout.addWidget(self.unit_combo)
 
+        equation_layout = QHBoxLayout()
+        self.equation_input = QLineEdit()
+        self.equation_input.setPlaceholderText('Enter line as y=mx+b or x=a or circle equation')
+        self.equation_apply_button = QPushButton('Populate from line equation')
+        self.equation_apply_button.clicked.connect(self.on_apply_equation_input)
+        equation_layout.addWidget(self.equation_input)
+        equation_layout.addWidget(self.equation_apply_button)
+
+        undo_layout = QHBoxLayout()
+        self.undo_button = QPushButton('Undo')
+        self.undo_button.clicked.connect(self.undo_last)
+        undo_layout.addWidget(self.undo_button)
+
         main_layout = QVBoxLayout()
+        main_layout.addLayout(equation_layout)
+        main_layout.addLayout(undo_layout)
         main_layout.addLayout(buttons_layout)
         main_layout.addWidget(self.mode_label)
         main_layout.addWidget(self.status_label)
@@ -215,6 +231,7 @@ class GeometryWidget(QWidget):
         self.canvas._scene.addItem(line_item)
 
         self.line_objects.append(LineObject(p1, p2, line_item))
+        self.history.append({'kind':'line_from_points','line':line_item,'p1':p1,'p2':p2})
         self.status_label.setText(f'Line {p1.name}{p2.name} created')
         self._clear_point_highlights()
         self.update_info_panel()
@@ -229,6 +246,7 @@ class GeometryWidget(QWidget):
         self.canvas._scene.addItem(circle_item)
 
         self.circle_objects.append(CircleObject(c, b, circle_item))
+        self.history.append({'kind':'circle_from_points','circle':circle_item,'center':c,'boundary':b})
         self.status_label.setText(f'Circle centered at {c.name} radius {self._formatted_length(r)}')
         self._clear_point_highlights()
         self.update_info_panel()
@@ -270,6 +288,7 @@ class GeometryWidget(QWidget):
         line_item.setPen(QPen(QColor('blue'), 2))
         self.canvas._scene.addItem(line_item)
         self.line_objects.append(LineObject(p1, p2, line_item))
+        self.history.append({'kind':'line_from_eq','line':line_item,'p1':p1,'p2':p2})
         self.status_label.setText(f'Equation line added: y = {m:.3f}x + {b:.3f}')
         self.update_info_panel()
 
@@ -282,6 +301,7 @@ class GeometryWidget(QWidget):
         self.canvas._scene.addItem(line_item)
         self.line_objects.append(LineObject(p1, p2, line_item))
         self.status_label.setText(f'Equation line added: x = {x_val:.2f}')
+        self.history.append({'kind':'line_from_eq','line':line_item,'p1':p1,'p2':p2})
         self.update_info_panel()
 
     def add_circle_from_equation(self, cx: float, cy: float, r: float):
@@ -291,6 +311,7 @@ class GeometryWidget(QWidget):
         circle_item.setPen(QPen(QColor('magenta'), 2))
         self.canvas._scene.addItem(circle_item)
         self.circle_objects.append(CircleObject(center, boundary, circle_item))
+        self.history.append({'kind':'circle_from_eq','circle':circle_item,'center':center,'boundary':boundary})
         self.status_label.setText(f'Equation circle added: center ({cx:.2f}, {cy:.2f}) r={r:.2f}')
         self.update_info_panel()
 
@@ -345,6 +366,8 @@ class GeometryWidget(QWidget):
             q = self.points[-1]
             dist = self._point_distance(p, q)
             suggestions.append(f"Distance {p.name}{q.name}: {self._formatted_length(dist)}")
+        
+        self.suggestions_box.setPlainText('')
 
         if len(self.points) >= 3:
             triplets = [self.points[i:i+3] for i in range(len(self.points)-2)]
@@ -359,13 +382,99 @@ class GeometryWidget(QWidget):
 
         # Theorem suggestions
         if len(self.points) >= 3:
-            suggestions.append('Theorems: for triangle points, compute area, perimeter, and check right angles (Pythagoras).')
-            suggestions.append('Try: construct perpendicular from vertex to opposite side; compare with current distances.')
+            steps = self.build_theorem_steps()
+            suggestions.extend(steps)
 
         if len(self.line_objects) >= 2:
             suggestions.append('Theorem: check if two lines are parallel or perpendicular by slope.')
 
         self.suggestions_box.setPlainText('\n'.join(suggestions))
+
+    def on_apply_equation_input(self):
+        equation_text = self.equation_input.text().strip()
+        if not equation_text:
+            self.status_label.setText('Enter equation first')
+            return
+        try:
+            cmd = self._parse_equation_command(equation_text)
+            result = self.apply_equation(cmd)
+            self.status_label.setText(result)
+            self.update_info_panel()
+        except Exception as e:
+            self.status_label.setText(f'Parse error: {e}')
+
+    def _parse_equation_command(self, equation_text: str) -> str:
+        eq_text = equation_text.strip().replace('^', '**')
+        x, y = sp.symbols('x y')
+        if eq_text.startswith('y='):
+            right = eq_text[2:]
+            expr = sp.sympify(right)
+            m = sp.simplify(sp.diff(expr, x))
+            b = expr.subs(x, 0)
+            return f'line:{float(m)}:{float(b)}'
+        if eq_text.startswith('x='):
+            xval = float(eq_text[2:])
+            return f'vertical:{xval}'
+        if '=' in eq_text:
+            lhs, rhs = eq_text.split('=', 1)
+            lhs_expr = sp.sympify(lhs)
+            rhs_expr = sp.sympify(rhs)
+            expr = sp.simplify(lhs_expr - rhs_expr)  # type: ignore
+            if expr.has(x**2) and expr.has(y**2):
+                # attempt circle detection
+                cx = -expr.coeff(x, 1)/2
+                cy = -expr.coeff(y, 1)/2
+                c = expr.subs({x:0, y:0})
+                r = sp.sqrt(cx**2 + cy**2 - c)
+                return f'circle:{float(cx)}:{float(cy)}:{float(r)}'
+        raise ValueError('Unsupported equation format')
+
+    def _remove_point_item(self, pt: PointItem):
+        if pt not in self.points:
+            return
+        idx = self.points.index(pt)
+        label = self.point_labels[idx]
+        self.canvas._scene.removeItem(label)
+        self.canvas._scene.removeItem(pt)
+        self.points.pop(idx)
+        self.point_labels.pop(idx)
+
+    def undo_last(self):
+        if not self.history:
+            self.status_label.setText('Nothing to undo.')
+            return
+        action = self.history.pop()
+        kind = action.get('kind')
+        if kind in ['line_from_eq', 'line_from_points']:
+            self.canvas._scene.removeItem(action['line'])
+            self.line_objects = [l for l in self.line_objects if l.item is not action['line']]
+            # do not remove points for line_from_points as user points could be shared
+            if kind == 'line_from_eq':
+                self._remove_point_item(action['p1'])
+                self._remove_point_item(action['p2'])
+            self.status_label.setText('Undid line creation')
+        elif kind in ['circle_from_eq', 'circle_from_points']:
+            self.canvas._scene.removeItem(action['circle'])
+            self.circle_objects = [c for c in self.circle_objects if c.item is not action['circle']]
+            if kind == 'circle_from_eq':
+                self._remove_point_item(action['center'])
+                self._remove_point_item(action['boundary'])
+            self.status_label.setText('Undid circle creation')
+        else:
+            self.status_label.setText('Unknown undo action')
+        self.update_info_panel()
+
+    def build_theorem_steps(self):
+        if len(self.points) < 3:
+            return ["Add at least 3 points to start triangle theorem steps."]
+        a, b, c = self.points[0], self.points[1], self.points[2]
+        steps = []
+        steps.append(f"Given triangle {a.name}{b.name}{c.name}:")
+        steps.append(f"1. Calculate side lengths {a.name}{b.name}, {b.name}{c.name}, {c.name}{a.name}.")
+        steps.append(f"2. Compute angles at {a.name}, {b.name}, {c.name} using law of cosines.")
+        steps.append(f"3. Check whether psi theorem holds (sum of angles = 180°).")
+        steps.append(f"4. If any angle is 90°, the triangle is right-angled (Pythagorean theorem).")
+        return steps
 
     def _clear_point_highlights(self):
         for pt in self.points:
