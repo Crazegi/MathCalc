@@ -359,6 +359,22 @@ class GeometryWidget(QWidget):
         cosang = max(-1.0, min(1.0, dot / (mag1*mag2)))
         return math.degrees(math.acos(cosang))
 
+    def _triangle_area_details(self, a: PointItem, b: PointItem, c: PointItem):
+        ax, ay = a.rect().center().x() + a.pos().x(), a.rect().center().y() + a.pos().y()
+        bx, by = b.rect().center().x() + b.pos().x(), b.rect().center().y() + b.pos().y()
+        cx, cy = c.rect().center().x() + c.pos().x(), c.rect().center().y() + c.pos().y()
+        area = abs(0.5 * ((ax*(by-cy) + bx*(cy-ay) + cx*(ay-by))))
+        factor = self._unit_scale()
+        unit = self.unit_combo.currentText()
+        area_unit = f"{unit}^2"
+        scaled_area = area * factor * factor
+        steps = [
+            f"Triangle {a.name}{b.name}{c.name} coordinates: A({ax:.2f},{ay:.2f}), B({bx:.2f},{by:.2f}), C({cx:.2f},{cy:.2f})",
+            "Use determinant formula: area = 0.5 * | x1(y2-y3) + x2(y3-y1) + x3(y1-y2) |",
+            f"Calculated raw area: {area:.2f} px^2 = {scaled_area:.2f} {area_unit}",
+        ]
+        return scaled_area, steps
+
     def _compute_suggestions(self):
         suggestions = []
         if len(self.points) >= 2:
@@ -374,6 +390,11 @@ class GeometryWidget(QWidget):
             for i, (a,b,c) in enumerate(triplets,1):
                 ang = self._angle_degrees(a.pos(), b.pos(), c.pos())
                 suggestions.append(f"Angle {a.name}{b.name}{c.name}: {ang:.1f}\u00b0")
+            # auto-calc area for first triangle
+            a0,b0,c0 = triplets[0]
+            tri_area, derivation = self._triangle_area_details(a0,b0,c0)
+            suggestions.append(f"Triangle {a0.name}{b0.name}{c0.name} area: {tri_area:.2f} {self.unit_combo.currentText()}^2")
+            suggestions.extend(derivation)
 
         if self.line_objects:
             suggestions.append('Suggest: compute slope and intercept for created lines')
