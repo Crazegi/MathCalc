@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<matura_requirements>
+    <exam_type>Polish Matura - Base Level (Poziom Podstawowy)</exam_type>
+    <formula>2023 (Session 2026)</formula>
+    <subject_areas>
+        <section title="1. Real Numbers and Expressions">
+            <topic>Operations on sets: union, intersection, difference</topic>
+            <topic>Absolute value: equations and inequalities of type |x-a| &lt; d</topic>
+            <topic>Powers and roots (including fractional exponents)</topic>
+            <topic>Logarithms: definition and properties of sums/differences</topic>
+            <topic>Percentages: increases, decreases, and simple/compound interest</topic>
+            <topic>Short multiplication formulas: (a±b)², (a±b)³, a²-b²</topic>
+        </section>
+        <section title="2. Equations and Inequalities">
+            <topic>Linear equations and inequalities with one variable</topic>
+            <topic>Quadratic equations: delta (Δ), roots, and vertex coordinates</topic>
+            <topic>Quadratic inequalities: solving and sketching parabolas</topic>
+            <topic>Polynomial equations: solving by grouping or common factor</topic>
+            <topic>Rational equations: solving equations of type P(x)/Q(x) = 0</topic>
+            <topic>Systems of linear equations: substitution and elimination methods</topic>
+        </section>
+        <section title="3. Functions">
+            <topic>General properties: domain, range, zeros, monotonicity</topic>
+            <topic>Linear function: f(x) = ax + b, parallel and perpendicular conditions</topic>
+            <topic>Quadratic function: standard, vertex, and factored forms</topic>
+            <topic>Exponential functions: f(x) = a^x and its graphs</topic>
+            <topic>Inverse proportionality: f(x) = a/x</topic>
+            <topic>Transformations: f(x-p)+q, f(-x), and -f(x)</topic>
+        </section>
+        <section title="4. Sequences">
+            <topic>General sequence terms and recursive definitions</topic>
+            <topic>Arithmetic sequences: n-th term and sum of n terms</topic>
+            <topic>Geometric sequences: n-th term and sum of n terms</topic>
+            <topic>Sequence properties: constant ratio and constant difference</topic>
+        </section>
+        <section title="5. Trigonometry">
+            <topic>Right triangle trigonometry: sin, cos, tan</topic>
+            <topic>Trigonometric identities: sin²α + cos²α = 1 and tanα = sinα/cosα</topic>
+            <topic>Reduction formulas: angles like (90° - α) and (180° - α)</topic>
+            <topic>Specific values: 30, 45, and 60 degrees</topic>
+        </section>
+        <section title="6. Geometry (Planimetry and Analytical)">
+            <topic>Triangle properties: sine and cosine rules</topic>
+            <topic>Circle geometry: central vs. inscribed angles, tangents</topic>
+            <topic>Similarity and congruence: SSS, SAS, AAA scales</topic>
+            <topic>Analytical geometry: distance formula, midpoint, and line equations</topic>
+        </section>
+        <section title="7. Stereometry (3D)">
+            <topic>Prisms and Pyramids: volume and surface area</topic>
+            <topic>Rotational solids: Cylinder, Cone, and Sphere</topic>
+            <topic>Angles in space: between edges, faces, and planes</topic>
+        </section>
+        <section title="8. Statistics and Probability">
+            <topic>Combinatorics: multiplication principle and permutations</topic>
+            <topic>Classical probability: P(A) = |A|/|Ω|</topic>
+            <topic>Descriptive statistics: mean, median, mode, and standard deviation</topic>
+        </section>
+    </subject_areas>
+</matura_requirements>

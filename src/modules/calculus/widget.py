@@ -85,7 +85,9 @@ class CalculusWidget(QWidget):
             val = self.point_input.text().strip()
             if val:
                 xv = float(val)
-                self.output.append(f"f'({xv}) = {float(first.subs(x, xv))}")
+                deriv_val = first.subs(x, xv)
+                deriv_text = str(sp.N(deriv_val))
+                self.output.append(f"f'({xv}) = {deriv_text}")
             self.plot_function(expr)
         except Exception as e:
             self.output.setPlainText(f'Error: {e}')
@@ -101,7 +103,8 @@ class CalculusWidget(QWidget):
             if val.startswith('[') and val.endswith(']'):
                 a,b = [float(v.strip()) for v in val[1:-1].split(',')]
                 definite = sp.integrate(expr, (x, a, b))
-                self.output.append(f"Definite integral [{a},{b}] = {float(definite)}")
+                def_val = sp.N(definite)
+                self.output.append(f"Definite integral [{a},{b}] = {def_val}")
             self.plot_function(expr)
         except Exception as e:
             self.output.setPlainText(f'Error: {e}')
