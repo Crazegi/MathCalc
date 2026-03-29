@@ -9,7 +9,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("MathTeach — Math Calculator & Tutor")
         self.stack = QStackedWidget()
         self.startup = StartupWidget(self.show_unit)
-        self.algebra = AlgebraWidget()
+        self.algebra = AlgebraWidget(self.apply_geometry_equation)
         self.geometry = GeometryWidget()
         self.stack.addWidget(self.startup)
         self.stack.addWidget(self.algebra)
@@ -26,3 +26,10 @@ class MainWindow(QMainWindow):
         else:
             # other units not implemented yet — return to startup
             self.stack.setCurrentWidget(self.startup)
+
+    def apply_geometry_equation(self, equation: str) -> str:
+        # Parse equation from Algebra and apply to geometry unit if available.
+        if not hasattr(self, 'geometry') or self.geometry is None:
+            return 'Geometry unit not available.'
+        return self.geometry.apply_equation(equation)
+

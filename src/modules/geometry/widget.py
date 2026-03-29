@@ -252,6 +252,68 @@ class GeometryWidget(QWidget):
             r = ((cpos.x()-bpos.x())**2 + (cpos.y()-bpos.y())**2)**0.5
             circ.item.setRect(cpos.x() - r, cpos.y() - r, 2*r, 2*r)
 
+    def _add_point_item(self, x: float, y: float, name: str) -> PointItem:
+        pt = PointItem(x, y, name, self)
+        self.canvas._scene.addItem(pt)
+        label = QGraphicsTextItem(name)
+        label.setPos(x + 8, y + 8)
+        label.setDefaultTextColor(QColor('black'))
+        self.canvas._scene.addItem(label)
+        self.points.append(pt)
+        self.point_labels.append(label)
+        return pt
+
+    def add_line_from_equation(self, m: float, b: float):
+        p1 = self._add_point_item(-100, -100 * m + b, f'L{len(self.points)+1}')
+        p2 = self._add_point_item(100, 100 * m + b, f'L{len(self.points)+1}')
+        line_item = QGraphicsLineItem(p1.rect().center().x() + p1.pos().x(), p1.rect().center().y() + p1.pos().y(), p2.rect().center().x() + p2.pos().x(), p2.rect().center().y() + p2.pos().y())
+        line_item.setPen(QPen(QColor('blue'), 2))
+        self.canvas._scene.addItem(line_item)
+        self.line_objects.append(LineObject(p1, p2, line_item))
+        self.status_label.setText(f'Equation line added: y = {m:.3f}x + {b:.3f}')
+        self.update_info_panel()
+
+    def add_vertical_line(self, x_val: float):
+        y1, y2 = -100, 100
+        p1 = self._add_point_item(x_val, y1, f'V{len(self.points)+1}')
+        p2 = self._add_point_item(x_val, y2, f'V{len(self.points)+1}')
+        line_item = QGraphicsLineItem(x_val, y1, x_val, y2)
+        line_item.setPen(QPen(QColor('blue'), 2))
+        self.canvas._scene.addItem(line_item)
+        self.line_objects.append(LineObject(p1, p2, line_item))
+        self.status_label.setText(f'Equation line added: x = {x_val:.2f}')
+        self.update_info_panel()
+
+    def add_circle_from_equation(self, cx: float, cy: float, r: float):
+        center = self._add_point_item(cx, cy, f'C{len(self.points)+1}')
+        boundary = self._add_point_item(cx + r, cy, f'C{len(self.points)+1}')
+        circle_item = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r)
+        circle_item.setPen(QPen(QColor('magenta'), 2))
+        self.canvas._scene.addItem(circle_item)
+        self.circle_objects.append(CircleObject(center, boundary, circle_item))
+        self.status_label.setText(f'Equation circle added: center ({cx:.2f}, {cy:.2f}) r={r:.2f}')
+        self.update_info_panel()
+
+    def apply_equation(self, command: str) -> str:
+        try:
+            parts = command.split(':')
+            kind = parts[0]
+            if kind == 'line' and len(parts) == 3:
+                m, b = float(parts[1]), float(parts[2])
+                self.add_line_from_equation(m, b)
+                return f'Applied line y = {m:.3f}x + {b:.3f}'
+            if kind == 'vertical' and len(parts) == 2:
+                x = float(parts[1])
+                self.add_vertical_line(x)
+                return f'Applied line x = {x:.2f}'
+            if kind == 'circle' and len(parts) == 4:
+                cx, cy, r = float(parts[1]), float(parts[2]), float(parts[3])
+                self.add_circle_from_equation(cx, cy, r)
+                return f'Applied circle center=({cx:.2f},{cy:.2f}), r={r:.2f}'
+            return 'Unsupported geometry command.'
+        except Exception as e:
+            return f'Geometry apply error: {e}'
+
     def _unit_scale(self):
         unit = self.unit_combo.currentText()
         return {
