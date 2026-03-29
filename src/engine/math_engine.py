@@ -142,6 +142,34 @@ class MathEngine:
         comb = math.comb(n, k)
         return comb * (p**k) * ((1-p)**(n-k))
 
+    def linear_regression(self, points):
+        # points: list of (x, y) tuples
+        if not points or len(points) < 2:
+            raise ValueError('At least 2 points required for regression')
+        xs = [float(p[0]) for p in points]
+        ys = [float(p[1]) for p in points]
+        n = len(points)
+        x_mean = sum(xs)/n
+        y_mean = sum(ys)/n
+        num = sum((xi-x_mean)*(yi-y_mean) for xi, yi in zip(xs, ys))
+        den = sum((xi-x_mean)**2 for xi in xs)
+        if abs(den) < 1e-12:
+            raise ValueError('Cannot compute regression for vertical line data')
+        slope = num / den
+        intercept = y_mean - slope * x_mean
+        return {'slope': slope, 'intercept': intercept, 'points': points}
+
+    def monte_carlo_probability(self, experiment_fn, trials=10000):
+        # experiment_fn: callable returning bool (success=1) or 0/1
+        if trials <= 0:
+            raise ValueError('trials must be positive')
+        success = 0
+        for _ in range(trials):
+            result = experiment_fn()
+            if result:
+                success += 1
+        return success / trials
+
     def binomial_cdf(self, n, k, p):
         return sum(self.binomial_pmf(n, i, p) for i in range(0, k+1))
 

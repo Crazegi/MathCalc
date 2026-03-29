@@ -6,6 +6,7 @@ from src.modules.calculus.widget import CalculusWidget
 from src.modules.trigonometry.widget import TrigonometryWidget
 from src.modules.functions.widget import FunctionsWidget
 from src.modules.probability.widget import ProbabilityWidget
+from src.modules.regression.widget import RegressionWidget
 from src.modules.stereometry.widget import StereometryWidget
 from src.modules.statistics.widget import StatisticsWidget
 from src.modules.curriculum.widget import CurriculumWidget
@@ -22,6 +23,7 @@ class MainWindow(QMainWindow):
         self.trigonometry = TrigonometryWidget()
         self.functions = FunctionsWidget()
         self.probability = ProbabilityWidget()
+        self.regression = RegressionWidget()
         self.stereometry = StereometryWidget()
         self.statistics = StatisticsWidget()
         self.curriculum = CurriculumWidget(self.show_topic)
@@ -32,6 +34,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.trigonometry)
         self.stack.addWidget(self.functions)
         self.stack.addWidget(self.probability)
+        self.stack.addWidget(self.regression)
         self.stack.addWidget(self.stereometry)
         self.stack.addWidget(self.statistics)
         self.stack.addWidget(self.curriculum)
@@ -52,6 +55,8 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(self.functions)
         elif unit_name == 'probability':
             self.stack.setCurrentWidget(self.probability)
+        elif unit_name == 'regression':
+            self.stack.setCurrentWidget(self.regression)
         elif unit_name == 'stereometry':
             self.stack.setCurrentWidget(self.stereometry)
         elif unit_name == 'statistics':

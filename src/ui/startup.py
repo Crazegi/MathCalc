@@ -15,7 +15,7 @@ class StartupWidget(QWidget):
         layout.addWidget(title)
         layout.addWidget(subtitle)
         buttons_layout = QHBoxLayout()
-        units = [("Algebra","algebra"),("Trigonometry","trigonometry"),("Functions","functions"),("Probability","probability"),("Geometry","geometry"),("Calculus","calculus"),("Stereometry","stereometry"),("Statistics","statistics")]
+        units = [("Algebra","algebra"),("Trigonometry","trigonometry"),("Functions","functions"),("Probability","probability"),("Regression","regression"),("Geometry","geometry"),("Calculus","calculus"),("Stereometry","stereometry"),("Statistics","statistics")]
         for name, key in units:
             btn = QPushButton(name)
             btn.setMinimumHeight(40)
