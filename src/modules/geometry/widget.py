@@ -1,10 +1,11 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QComboBox, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QPen, QBrush, QColor, QPainter, QFont
 from PySide6.QtWidgets import QGraphicsItem
 from dataclasses import dataclass
 from typing import cast
 import sympy as sp
+import math
 
 
 class PointItem(QGraphicsEllipseItem):
@@ -76,6 +77,12 @@ class GeometryWidget(QWidget):
         self.canvas = GeometryCanvas(self)
         self.canvas.setMinimumSize(700, 500)
 
+        # Units selector
+        self.unit_combo = QComboBox()
+        self.unit_combo.addItems(['mm', 'cm', 'm'])
+        self.unit_combo.currentTextChanged.connect(self.update_info_panel)
+        self.unit_label = QLabel('Unit: mm')
+
         buttons_layout = QHBoxLayout()
         self.mode_label = QLabel('Mode: Add Point')
         self.status_label = QLabel('Click on the canvas to place a point')
@@ -87,17 +94,24 @@ class GeometryWidget(QWidget):
         add_point_btn = QPushButton('Add Point')
         add_line_btn = QPushButton('Add Line')
         add_circle_btn = QPushButton('Add Circle')
+        add_angle_btn = QPushButton('Measure Angle')
         clear_btn = QPushButton('Clear All')
 
         add_point_btn.clicked.connect(lambda: self.set_mode('point'))
         add_line_btn.clicked.connect(lambda: self.set_mode('line'))
         add_circle_btn.clicked.connect(lambda: self.set_mode('circle'))
+        add_angle_btn.clicked.connect(lambda: self.set_mode('angle'))
         clear_btn.clicked.connect(self.clear_all)
+
+        buttons_layout.addWidget(add_angle_btn)
 
         buttons_layout.addWidget(add_point_btn)
         buttons_layout.addWidget(add_line_btn)
         buttons_layout.addWidget(add_circle_btn)
         buttons_layout.addWidget(clear_btn)
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(self.unit_label)
+        buttons_layout.addWidget(self.unit_combo)
 
         main_layout = QVBoxLayout()
         main_layout.addLayout(buttons_layout)
@@ -106,6 +120,15 @@ class GeometryWidget(QWidget):
         main_layout.addWidget(self.canvas)
         main_layout.addWidget(QLabel('Geometry Info'))
         main_layout.addWidget(self.info_box)
+
+        # Suggestions and angle awareness
+        self.suggestions_box = QTextEdit()
+        self.suggestions_box.setReadOnly(True)
+        self.suggestions_box.setFont(QFont('Courier', 10))
+        self.suggestions_box.setFixedHeight(120)
+        main_layout.addWidget(QLabel('Suggestions'))
+        main_layout.addWidget(self.suggestions_box)
+
         self.setLayout(main_layout)
 
         self.set_mode('point')
@@ -121,6 +144,10 @@ class GeometryWidget(QWidget):
             self.status_label.setText('Select two existing points to connect with a line')
         elif mode == 'circle':
             self.status_label.setText('Select center point then a point on circumference')
+        elif mode == 'angle':
+            self.status_label.setText('Select three points (vertex second) to measure angle')
+        self.unit_label.setText(f'Unit: {self.unit_combo.currentText()}')
+
 
     def add_point(self, pos: QPointF):
         name = f'P{len(self.points)+1}'
@@ -165,6 +192,9 @@ class GeometryWidget(QWidget):
         elif self.canvas.mode == 'circle' and len(self.selected_points) == 2:
             self._commit_circle()
             self.selected_points = []
+        elif self.canvas.mode == 'angle' and len(self.selected_points) == 3:
+            self._commit_angle()
+            self.selected_points = []
 
     def _highlight(self, pt: PointItem):
         pt.setBrush(QBrush(QColor('green')))
@@ -199,13 +229,16 @@ class GeometryWidget(QWidget):
         self.canvas._scene.addItem(circle_item)
 
         self.circle_objects.append(CircleObject(c, b, circle_item))
-        self.status_label.setText(f'Circle centered at {c.name} radius {r:.1f}')
+        self.status_label.setText(f'Circle centered at {c.name} radius {self._formatted_length(r)}')
         self._clear_point_highlights()
         self.update_info_panel()
 
-    def _clear_point_highlights(self):
-        for pt in self.points:
-            pt.setBrush(QBrush(QColor('red')))
+    def _commit_angle(self):
+        a, b, c = self.selected_points
+        angle_deg = self._angle_degrees(a.pos(), b.pos(), c.pos())
+        self.status_label.setText(f'Angle {a.name}{b.name}{c.name}: {angle_deg:.1f}\u00b0')
+        # Suggest using the angle for triangle and geometry reasoning.
+        self.update_info_panel()
 
     def _refresh_geometry_objects(self):
         for line in self.line_objects:
@@ -218,6 +251,68 @@ class GeometryWidget(QWidget):
             bpos = circ.boundary.rect().center() + circ.boundary.pos()
             r = ((cpos.x()-bpos.x())**2 + (cpos.y()-bpos.y())**2)**0.5
             circ.item.setRect(cpos.x() - r, cpos.y() - r, 2*r, 2*r)
+
+    def _unit_scale(self):
+        unit = self.unit_combo.currentText()
+        return {
+            'mm': 1.0,
+            'cm': 0.1,
+            'm': 0.001
+        }.get(unit, 1.0)
+
+    def _formatted_length(self, length_px: float) -> str:
+        scale = self._unit_scale()
+        unit = self.unit_combo.currentText()
+        return f"{length_px*scale:.2f} {unit}"
+
+    def _angle_degrees(self, p1, vertex, p2):
+        v1 = (p1.x() - vertex.x(), p1.y() - vertex.y())
+        v2 = (p2.x() - vertex.x(), p2.y() - vertex.y())
+        dot = v1[0]*v2[0] + v1[1]*v2[1]
+        mag1 = math.hypot(*v1)
+        mag2 = math.hypot(*v2)
+        if mag1 == 0 or mag2 == 0:
+            return 0.0
+        cosang = max(-1.0, min(1.0, dot / (mag1*mag2)))
+        return math.degrees(math.acos(cosang))
+
+    def _compute_suggestions(self):
+        suggestions = []
+        if len(self.points) >= 2:
+            p = self.points[-2]
+            q = self.points[-1]
+            dist = self._point_distance(p, q)
+            suggestions.append(f"Distance {p.name}{q.name}: {self._formatted_length(dist)}")
+
+        if len(self.points) >= 3:
+            triplets = [self.points[i:i+3] for i in range(len(self.points)-2)]
+            for i, (a,b,c) in enumerate(triplets,1):
+                ang = self._angle_degrees(a.pos(), b.pos(), c.pos())
+                suggestions.append(f"Angle {a.name}{b.name}{c.name}: {ang:.1f}\u00b0")
+
+        if self.line_objects:
+            suggestions.append('Suggest: compute slope and intercept for created lines')
+        if self.circle_objects:
+            suggestions.append('Suggest: compute area and circumference for created circles')
+
+        # Theorem suggestions
+        if len(self.points) >= 3:
+            suggestions.append('Theorems: for triangle points, compute area, perimeter, and check right angles (Pythagoras).')
+            suggestions.append('Try: construct perpendicular from vertex to opposite side; compare with current distances.')
+
+        if len(self.line_objects) >= 2:
+            suggestions.append('Theorem: check if two lines are parallel or perpendicular by slope.')
+
+        self.suggestions_box.setPlainText('\n'.join(suggestions))
+
+    def _clear_point_highlights(self):
+        for pt in self.points:
+            pt.setBrush(QBrush(QColor('red')))
+
+    def _point_distance(self, p1: PointItem, p2: PointItem) -> float:
+        p1c = p1.rect().center() + p1.pos()
+        p2c = p2.rect().center() + p2.pos()
+        return math.hypot(p2c.x() - p1c.x(), p2c.y() - p1c.y())
 
     def geometry_line_equation(self, lo: LineObject) -> str:
         x1, y1 = lo.p1.rect().center().x() + lo.p1.pos().x(), lo.p1.rect().center().y() + lo.p1.pos().y()
@@ -236,9 +331,11 @@ class GeometryWidget(QWidget):
 
     def update_info_panel(self):
         lines = ['Points:']
+        factor = self._unit_scale()
+        unit = self.unit_combo.currentText()
         for pt in self.points:
             x, y = pt.rect().center().x() + pt.pos().x(), pt.rect().center().y() + pt.pos().y()
-            lines.append(f'  {pt.name}: ({x:.2f}, {y:.2f})')
+            lines.append(f'  {pt.name}: ({x*factor:.2f}, {y*factor:.2f}) {unit}')
 
         if self.line_objects:
             lines.append('Lines:')
@@ -246,16 +343,20 @@ class GeometryWidget(QWidget):
                 eq = self.geometry_line_equation(lo)
                 p = lo.p1
                 q = lo.p2
-                dist = ((p.rect().center().x()+p.pos().x()-q.rect().center().x()-q.pos().x())**2 + (p.rect().center().y()+p.pos().y()-q.rect().center().y()-q.pos().y())**2)**0.5
-                lines.append(f'  L{i} {p.name}{q.name}: {eq} (length {dist:.2f})')
+                dist_px = ((p.rect().center().x()+p.pos().x()-q.rect().center().x()-q.pos().x())**2 + (p.rect().center().y()+p.pos().y()-q.rect().center().y()-q.pos().y())**2)**0.5
+                lines.append(f'  L{i} {p.name}{q.name}: {eq} (length {self._formatted_length(dist_px)})')
 
         if self.circle_objects:
             lines.append('Circles:')
             for i, co in enumerate(self.circle_objects, 1):
                 eq = self.geometry_circle_equation(co)
-                lines.append(f'  C{i} center={co.center.name}, rpt={co.boundary.name}: {eq}')
+                cpos = co.center.rect().center() + co.center.pos()
+                bpos = co.boundary.rect().center() + co.boundary.pos()
+                radius_px = math.hypot(cpos.x()-bpos.x(), cpos.y()-bpos.y())
+                lines.append(f'  C{i} center={co.center.name}, rpt={co.boundary.name}: {eq} (r={self._formatted_length(radius_px)})')
 
         self.info_box.setPlainText('\n'.join(lines))
+        self._compute_suggestions()
 
     def clear_all(self):
         self.canvas._scene.clear()
