@@ -2,8 +2,14 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButt
 from PySide6.QtCore import Qt
 from src.engine.math_engine import MathEngine
 import pyqtgraph as pg
-import pyqtgraph.opengl as gl
 import json
+
+try:
+    import pyqtgraph.opengl as gl
+    OPENGL_AVAILABLE = True
+except ModuleNotFoundError:
+    gl = None
+    OPENGL_AVAILABLE = False
 
 class RegressionWidget(QWidget):
     def __init__(self):
@@ -42,12 +48,17 @@ class RegressionWidget(QWidget):
         self.graph_widget.showGrid(x=True, y=True)
         layout.addWidget(self.graph_widget, stretch=1)
 
-        self.gl_view = gl.GLViewWidget()
-        self.gl_view.setCameraPosition(distance=40)
-        layout.addWidget(self.gl_view, stretch=1)
+        if OPENGL_AVAILABLE:
+            self.gl_view = gl.GLViewWidget()  # type: ignore
+            self.gl_view.setCameraPosition(distance=40)
+            layout.addWidget(self.gl_view, stretch=1)
 
-        self.scatter_3d = gl.GLScatterPlotItem(size=5, color=(1, 0, 0, 1), pxMode=False)
-        self.gl_view.addItem(self.scatter_3d)
+            self.scatter_3d = gl.GLScatterPlotItem(size=5, color=(1, 0, 0, 1), pxMode=False)  # type: ignore
+            self.gl_view.addItem(self.scatter_3d)
+        else:
+            self.gl_view = None
+            self.scatter_3d = None
+            layout.addWidget(QLabel('OpenGL not available; 3D view disabled (install PyOpenGL).'), stretch=0)
 
         self.setLayout(layout)
 
@@ -86,9 +97,9 @@ class RegressionWidget(QWidget):
             self.graph_widget.plot(x_line, y_line, pen=pg.mkPen('r', width=2))
 
             # 3D scatter
-            z_line = y_line
-            xyz = [[x, y, 0] for x, y in zip(xs, ys)]
-            self.scatter_3d.setData(pos=xyz, size=5, color=(1,0,0,1))
+            if self.scatter_3d:
+                xyz = [[x, y, 0] for x, y in zip(xs, ys)]
+                self.scatter_3d.setData(pos=xyz, size=5, color=(1,0,0,1))
 
             self.result_box.setPlainText(f"Plotted {len(points)} points and best-fit line.")
         except Exception as e:
